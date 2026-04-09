@@ -51,7 +51,7 @@ export const matchesRelations = relations(matches, ({ many }) => ({
 
 export const commentaryRelations = relations(commentary, ({ one }) => ({
   matches: one(matches, {
-    fields: [matchId],
+    fields: [commentary.matchId],
     references: [matches.id],
   }),
 }));
