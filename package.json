@@ -20,9 +20,14 @@
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
     "pg": "^8.20.0",
+    "ws": "^8.20.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.31.10"
+    "drizzle-kit": "^0.31.10",
+    "wscat": "^6.1.0"
+  },
+  "overrides": {
+    "esbuild": "^0.25.4"
   }
 }
