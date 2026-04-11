@@ -7,9 +7,12 @@ import { db } from "../db/db.js";
 import { matches } from "../db/schema.js";
 import { getMatchStatus } from "../utils/match.status.js";
 import { desc } from "drizzle-orm";
+import { rateLimitMiddleware } from "../middleware/rateLimit.js";
 
 export const matchRouter = Router();
 const MAX_LIMIT = 100;
+
+matchRouter.use(rateLimitMiddleware);
 
 matchRouter.get("/", async (req, res) => {
   const parsed = listMatchesQuerySchema.safeParse(req.query);

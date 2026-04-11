@@ -1,4 +1,15 @@
 import { WebSocketServer, WebSocket } from "ws";
+import { createWebSocketRateLimiter } from "./rateLimiter.js";
+
+const wsLimiter = createWebSocketRateLimiter({
+  points: 10, //ten conns/min
+  duration: 60,
+  maxConnectionsPerIP: 3, //max symultaneous
+});
+
+function getIP(req) {
+  return req.socket.remoteAddress;
+}
 
 export function sendJson(socket, payload) {
   if (socket.readyState !== WebSocket.OPEN) {
@@ -27,14 +38,24 @@ export function attachWebSocketServer(server) {
     maxPayload: 1024 * 1024,
   });
 
-  wss.on("connection", (socket) => {
+  wss.on("connection", async (socket, req) => {
+    const ip = getIP(req);
+
+    //
+    const allowed = await wsLimiter.onConnection(socket, req);
+    if (!allowed) return;
+
     socket.isAlive = true;
     socket.on("pong", () => {
       socket.isAlive = true;
     });
 
-    sendJson(socket, { type: "Welcome" });
+    socket.on("close", () => {
+      wsLimiter.onClose(socket);
+    });
+
     socket.on("error", console.error);
+    sendJson(socket, { type: "Welcome" });
   });
 
   const interval = setInterval(() => {
