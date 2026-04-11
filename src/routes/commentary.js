@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { eq, desc } from "drizzle-orm";
 import { db } from "../db/db.js";
-import { commentary } from "../db/schema.js";
+import { commentary, matches } from "../db/schema.js";
 import { matchIdParamSchema } from "../validation/matches.js";
 import {
   createCommentarySchema,
@@ -29,6 +29,15 @@ commentaryRouter.post("/", async (req, res) => {
   }
 
   try {
+    const [matchRow] = await db
+      .select({ id: matches.id })
+      .from(matches)
+      .where(eq(matches.id, paramsResult.data.id))
+      .limit(1);
+
+    if (!matchRow) {
+      return res.status(404).json({ error: "Match not found" });
+    }
     const { minute, ...rest } = bodyResult.data;
     const [result] = await db
       .insert(commentary)
