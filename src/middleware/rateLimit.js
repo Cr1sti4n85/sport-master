@@ -6,12 +6,7 @@ const rateLimiter = new RateLimiterMemory({
 });
 
 function getClientId(req) {
-  return (
-    req.ip ||
-    req.headers["x-forwarded-for"] ||
-    req.socket.remoteAddress ||
-    "unknown"
-  );
+  return req.ip || req.socket.remoteAddress || "unknown";
 }
 
 export const rateLimitMiddleware = async (req, res, next) => {
@@ -19,11 +14,15 @@ export const rateLimitMiddleware = async (req, res, next) => {
 
   try {
     await rateLimiter.consume(key);
-    next();
+    return next();
   } catch (rejRes) {
-    res.status(429).json({
-      error: "Too many requests",
-      retryAfter: Math.ceil(rejRes.msBeforeNext / 1000),
-    });
+    if (typeof rejRes?.msBeforeNext === "number") {
+      return res.status(429).json({
+        error: "Too many requests",
+        retryAfter: Math.ceil(rejRes.msBeforeNext / 1000),
+      });
+    }
+
+    return next(rejRes);
   }
 };

@@ -1,9 +1,7 @@
 import { RateLimiterMemory } from "rate-limiter-flexible";
 
 function defaultGetIP(req) {
-  return (
-    req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown"
-  );
+  return req.socket?.remoteAddress || "unknown";
 }
 
 export function createWebSocketRateLimiter({
