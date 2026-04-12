@@ -3,12 +3,15 @@ import { eq, desc } from "drizzle-orm";
 import { db } from "../db/db.js";
 import { commentary, matches } from "../db/schema.js";
 import { matchIdParamSchema } from "../validation/matches.js";
+import { rateLimitMiddleware } from "../middleware/rateLimit.js";
 import {
   createCommentarySchema,
   listCommentaryQuerySchema,
 } from "../validation/commentary.js";
 
 export const commentaryRouter = Router({ mergeParams: true });
+
+commentaryRouter.use(rateLimitMiddleware);
 
 commentaryRouter.post("/", async (req, res) => {
   const paramsResult = matchIdParamSchema.safeParse(req.params);
@@ -47,6 +50,14 @@ commentaryRouter.post("/", async (req, res) => {
         ...rest,
       })
       .returning();
+
+    if (typeof res.app.locals.broadcastCommentary === "function") {
+      try {
+        res.app.locals.broadcastCommentary(result.matchId, result);
+      } catch (wsError) {
+        console.error("Failed to broadcast commentary", wsError);
+      }
+    }
 
     res.status(201).json({
       data: result,
