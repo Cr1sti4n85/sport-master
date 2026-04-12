@@ -5,15 +5,19 @@ function defaultGetIP(req) {
 }
 
 export function createWebSocketRateLimiter({
-  points = 10,
-  duration = 60,
+  connection = {
+    points: 10,
+    duration: 60,
+  },
+  message = {
+    points: 20,
+    duration: 1,
+  },
   maxConnectionsPerIP = 3,
   getClientId = defaultGetIP,
 } = {}) {
-  const connectionLimiter = new RateLimiterMemory({
-    points,
-    duration,
-  });
+  const connectionLimiter = new RateLimiterMemory(connection);
+  const messageLimiter = new RateLimiterMemory(message);
 
   const activeConnections = new Map();
 
@@ -42,6 +46,18 @@ export function createWebSocketRateLimiter({
     return true;
   }
 
+  async function onMessage(socket) {
+    const key = socket._rateLimitKey;
+    if (!key) return false;
+
+    try {
+      await messageLimiter.consume(key);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function onClose(socket) {
     const key = socket._rateLimitKey;
     if (!key) return;
@@ -59,5 +75,6 @@ export function createWebSocketRateLimiter({
   return {
     onConnection,
     onClose,
+    onMessage,
   };
 }

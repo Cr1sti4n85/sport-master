@@ -2,9 +2,15 @@ import { WebSocketServer, WebSocket } from "ws";
 import { createWebSocketRateLimiter } from "./rateLimiter.js";
 
 const wsLimiter = createWebSocketRateLimiter({
-  points: 10, //ten conns/min
-  duration: 60,
-  maxConnectionsPerIP: 3, //max symultaneous
+  connection: {
+    points: 10,
+    duration: 60,
+  },
+  message: {
+    points: 15,
+    duration: 1,
+  },
+  maxConnectionsPerIP: 3,
 });
 
 const matchSubscribers = new Map();
@@ -111,7 +117,15 @@ export function attachWebSocketServer(server) {
 
     sendJson(socket, { type: "Welcome" });
 
-    socket.on("message", (data) => {
+    socket.on("message", async (data) => {
+      const allowed = await wsLimiter.onMessage(socket);
+      if (!allowed) {
+        sendJson(socket, {
+          type: "error",
+          message: "Rate limit for messages exceeded",
+        });
+        return;
+      }
       handleMessage(socket, data);
     });
 
