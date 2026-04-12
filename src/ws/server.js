@@ -97,8 +97,9 @@ export function attachWebSocketServer(server) {
   wss.on("connection", async (socket, req) => {
     const allowed = await wsLimiter.onConnection(socket, req);
     if (!allowed) return;
-
+    socket.subscriptions = new Set();
     socket.isAlive = true;
+
     socket.on("pong", () => {
       socket.isAlive = true;
     });
@@ -108,17 +109,15 @@ export function attachWebSocketServer(server) {
       cleanupSubscriptions(socket);
     });
 
-    socket.subscriptions = new Set();
-
     sendJson(socket, { type: "Welcome" });
 
     socket.on("message", (data) => {
       handleMessage(socket, data);
     });
 
-    socket.on("error", () => {
+    socket.on("error", (err) => {
+      console.error("Websocket error", err);
       socket.terminate();
-      console.error;
     });
   });
 
