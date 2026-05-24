@@ -10,10 +10,12 @@ const HOST = process.env.HOST || "0.0.0.0";
 const app = express();
 const server = http.createServer(app);
 
+const replicaApp = process.env.APP_NAME
+
 app.use(express.json());
 
 app.get("/", (req, res) => {
-  res.json({ message: "Sport Master API is running" });
+  res.json({ message: `Request served by ${replicaApp}` });
 });
 
 app.use("/matches", matchRouter);
@@ -27,7 +29,7 @@ app.locals.broadcastCommentary = broadcastCommentary;
 server.listen(PORT, HOST, () => {
   const baseURL =
     HOST === "0.0.0.0" ? `http://localhost:${PORT}` : `http://${HOST}:${PORT}`;
-  console.log(`Server is running on ${baseURL}`);
+  console.log(` ${replicaApp} is running on ${baseURL}`);
   console.log(
     `Websocket server is running on ${baseURL.replace("http", "ws")}/ws`,
   );
