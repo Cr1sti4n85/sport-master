@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: sport-master-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - backend
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sport-master-db
+    environment:
+      POSTGRES_USER: sport_user
+      POSTGRES_PASSWORD: sport_password
+      POSTGRES_DB: sport_master
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sport_user"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - backend
+
+  api1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sport-master-api-1
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      HOST: 0.0.0.0
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DATABASE_URL: "postgresql://sport_user:sport_password@postgres:5432/sport_master"
+      NODE_ENV: production
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+
+  api2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sport-master-api-2
+    ports:
+      - "8081:8080"
+    environment:
+      PORT: 8080
+      HOST: 0.0.0.0
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DATABASE_URL: "postgresql://sport_user:sport_password@postgres:5432/sport_master"
+      NODE_ENV: production
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+
+  api3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sport-master-api-3
+    ports:
+      - "8082:8080"
+    environment:
+      PORT: 8080
+      HOST: 0.0.0.0
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DATABASE_URL: "postgresql://sport_user:sport_password@postgres:5432/sport_master"
+      NODE_ENV: production
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+
+networks:
+  backend:
+    driver: bridge
