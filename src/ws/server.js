@@ -14,6 +14,7 @@ const wsLimiter = createWebSocketRateLimiter({
 });
 
 const matchSubscribers = new Map();
+const redisSubscribedMatches = new Set();
 
 //utils
 export function sendJson(socket, payload) {
@@ -91,13 +92,39 @@ function handleMessage(socket, data) {
 
 /*
 this receives the express http server and passes it into
-the web socket
+the web socket. Also injects Redis pub/sub for distributed messaging
 */
-export function attachWebSocketServer(server) {
+export function attachWebSocketServer(server, { publisher, subscriber }) {
   const wss = new WebSocketServer({
     server,
     path: "/ws",
     maxPayload: 1024 * 1024,
+  });
+
+  // Handle Redis messages from other instances
+  subscriber.on("message", (channel, message) => {
+    try {
+      const payload = JSON.parse(message);
+
+      if (channel === "matches:broadcast") {
+        // Broadcast to all connected clients
+        broadcastToAll(wss, payload);
+      } else if (channel.startsWith("match:") && channel.endsWith(":commentary")) {
+        // Extract matchId from channel name (e.g., "match:123:commentary" -> 123)
+        const matchId = parseInt(channel.slice(6, -11), 10);
+        // Broadcast only to subscribers of this match
+        broadcastToMatch(matchId, payload);
+      }
+    } catch (err) {
+      console.error("Error processing Redis message:", err);
+    }
+  });
+
+  // Subscribe to broadcast channel from Redis
+  subscriber.subscribe("matches:broadcast", (err) => {
+    if (err) {
+      console.error("Failed to subscribe to matches:broadcast:", err);
+    }
   });
 
   wss.on("connection", async (socket, req) => {
@@ -126,7 +153,56 @@ export function attachWebSocketServer(server) {
         });
         return;
       }
-      handleMessage(socket, data);
+
+      try {
+        const message = JSON.parse(data.toString());
+
+        if (message?.type === "subscribe" && Number.isInteger(message.matchId)) {
+          const matchId = message.matchId;
+          const channel = `match:${matchId}:commentary`;
+
+          subscribe(matchId, socket);
+          socket.subscriptions.add(matchId);
+
+          // Subscribe to Redis channel if not already subscribed
+          if (!redisSubscribedMatches.has(matchId)) {
+            redisSubscribedMatches.add(matchId);
+            subscriber.subscribe(channel, (err) => {
+              if (err) {
+                console.error(`Failed to subscribe to ${channel}:`, err);
+              }
+            });
+          }
+
+          sendJson(socket, { type: "subscribed", matchId });
+          return;
+        }
+
+        if (message?.type === "unsubscribe" && Number.isInteger(message.matchId)) {
+          const matchId = message.matchId;
+          unsubscribe(matchId, socket);
+          socket.subscriptions.delete(matchId);
+
+          // Unsubscribe from Redis channel if no local subscribers left
+          if (!matchSubscribers.has(matchId)) {
+            const channel = `match:${matchId}:commentary`;
+            redisSubscribedMatches.delete(matchId);
+            subscriber.unsubscribe(channel, (err) => {
+              if (err) {
+                console.error(`Failed to unsubscribe from ${channel}:`, err);
+              }
+            });
+          }
+
+          sendJson(socket, { type: "unsubscribed", matchId });
+          return;
+        }
+
+        // Handle other message types if needed
+        handleMessage(socket, data);
+      } catch {
+        sendJson(socket, { type: "error", message: "Invalid JSON" });
+      }
     });
 
     socket.on("error", (err) => {
@@ -148,11 +224,20 @@ export function attachWebSocketServer(server) {
   });
 
   function broadcastMatchCreated(match) {
-    broadcastToAll(wss, { type: "match_created", data: match });
+    const payload = { type: "match_created", data: match };
+    broadcastToAll(wss, payload);
+    // Publish to Redis so other instances also broadcast
+    publisher.publish("matches:broadcast", JSON.stringify(payload));
   }
 
   function broadcastCommentary(matchId, comment) {
-    broadcastToMatch(matchId, { type: "commentary", data: comment });
+    const payload = { type: "commentary", data: comment };
+    broadcastToMatch(matchId, payload);
+    // Publish to Redis so other instances also broadcast
+    publisher.publish(
+      `match:${matchId}:commentary`,
+      JSON.stringify(payload)
+    );
   }
 
   return {
